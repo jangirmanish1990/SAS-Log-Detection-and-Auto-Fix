@@ -25,6 +25,7 @@ _FIXED_CODE = (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def make_mapping() -> ErrorMapping:
     error = SASError(
         severity="ERROR",
@@ -77,12 +78,14 @@ def base_state(fixable: bool = True) -> FixerState:
 
 def mock_llm_response(new_code: str, explanation: str = "Fixed typo") -> MagicMock:
     """Return a mock OpenAI response whose content is a success patch JSON."""
-    content = json.dumps({
-        "success": True,
-        "new_code": new_code,
-        "explanation": explanation,
-        "error": "",
-    })
+    content = json.dumps(
+        {
+            "success": True,
+            "new_code": new_code,
+            "explanation": explanation,
+            "error": "",
+        }
+    )
     response = MagicMock()
     response.choices[0].message.content = content
     return response
@@ -97,6 +100,7 @@ def _mock_client(response: MagicMock) -> MagicMock:
 # ---------------------------------------------------------------------------
 # Tests — guard paths
 # ---------------------------------------------------------------------------
+
 
 def test_dry_run_skips() -> None:
     state = base_state()
@@ -133,6 +137,7 @@ def test_unfixable_skipped_no_llm_call() -> None:
 # Tests — successful patch
 # ---------------------------------------------------------------------------
 
+
 def test_successful_patch() -> None:
     response = mock_llm_response(_FIXED_CODE)
     with patch(_PATCH_TARGET, return_value=_mock_client(response)):
@@ -160,6 +165,7 @@ def test_run_log_updated() -> None:
 # Tests — failure and fallback paths
 # ---------------------------------------------------------------------------
 
+
 def test_llm_failure_adds_to_errors() -> None:
     client = MagicMock()
     client.chat.completions.create.side_effect = Exception("timeout")
@@ -170,12 +176,14 @@ def test_llm_failure_adds_to_errors() -> None:
 
 
 def test_llm_success_false_adds_to_errors() -> None:
-    content = json.dumps({
-        "success": False,
-        "new_code": "",
-        "explanation": "",
-        "error": "Cannot determine fix",
-    })
+    content = json.dumps(
+        {
+            "success": False,
+            "new_code": "",
+            "explanation": "",
+            "error": "Cannot determine fix",
+        }
+    )
     response = MagicMock()
     response.choices[0].message.content = content
     with patch(_PATCH_TARGET, return_value=_mock_client(response)):
@@ -194,10 +202,12 @@ def test_malformed_json_falls_back() -> None:
 
 def test_no_matching_mapping() -> None:
     state = base_state()
-    state["diagnoses"] = [{
-        **make_diagnosis(),
-        "node_id": "node999",
-    }]
+    state["diagnoses"] = [
+        {
+            **make_diagnosis(),
+            "node_id": "node999",
+        }
+    ]
     result = generate_patches(state)
     assert result["patches"] == []
     assert len(result["errors_encountered"]) >= 1
@@ -206,6 +216,7 @@ def test_no_matching_mapping() -> None:
 # ---------------------------------------------------------------------------
 # Tests — _parse_patch_response unit tests
 # ---------------------------------------------------------------------------
+
 
 def test_parse_patch_response_strict_json() -> None:
     payload = {"success": True, "new_code": "x", "explanation": "y", "error": ""}

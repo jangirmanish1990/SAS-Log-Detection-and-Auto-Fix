@@ -6,7 +6,7 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
-from core.egp_writer import PatchResult, _derive_output_path, apply_patches
+from core.egp_writer import _derive_output_path, apply_patches
 
 # ---------------------------------------------------------------------------
 # Shared XML content
@@ -41,6 +41,7 @@ run;
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def egp_file(tmp_path: Path) -> str:
     """Write EGP_XML into a real .egp ZIP on disk and return its path as a string."""
@@ -53,6 +54,7 @@ def egp_file(tmp_path: Path) -> str:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _read_code_element(zip_path: str, node_id: str) -> str | None:
     """Open a .egp ZIP, parse project.xml, return the text of the Code element with id=node_id."""
@@ -69,6 +71,7 @@ def _read_code_element(zip_path: str, node_id: str) -> str | None:
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 def test_output_path_derived(egp_file: str) -> None:
     output_path, _ = apply_patches(egp_file, [])
@@ -103,7 +106,9 @@ def test_patch_applied_to_code(egp_file: str) -> None:
 
 
 def test_patch_result_success(egp_file: str) -> None:
-    patches = [{"node_id": "node001", "xml_file": "project.xml", "new_code": "fixed;\n"}]
+    patches = [
+        {"node_id": "node001", "xml_file": "project.xml", "new_code": "fixed;\n"}
+    ]
     _, results = apply_patches(egp_file, patches)
 
     matched = [r for r in results if r.node_id == "node001"]
@@ -123,7 +128,11 @@ def test_unmatched_node_returns_failure(egp_file: str) -> None:
 
 def test_original_file_untouched(egp_file: str) -> None:
     patches = [
-        {"node_id": "node001", "xml_file": "project.xml", "new_code": "salary_new = salary * 1.1;\n"}
+        {
+            "node_id": "node001",
+            "xml_file": "project.xml",
+            "new_code": "salary_new = salary * 1.1;\n",
+        }
     ]
     apply_patches(egp_file, patches)
 

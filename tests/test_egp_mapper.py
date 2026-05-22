@@ -47,6 +47,7 @@ run;
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def egp_bytes() -> io.BytesIO:
     """Return a BytesIO containing a minimal valid .egp ZIP archive."""
@@ -68,6 +69,7 @@ def line_map(egp_bytes: io.BytesIO, tmp_path: Path) -> EGPLineMap:
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 def test_two_nodes_found(line_map: EGPLineMap) -> None:
     assert len(line_map.nodes) == 2

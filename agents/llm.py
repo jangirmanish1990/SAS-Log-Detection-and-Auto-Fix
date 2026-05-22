@@ -20,9 +20,7 @@ FAST_MODEL: str = "gpt-4o-mini"
 
 _api_key: str = os.environ.get("OPENAI_API_KEY", "")
 if not _api_key:
-    raise RuntimeError(
-        "OPENAI_API_KEY is not set. Add it to your .env file."
-    )
+    raise RuntimeError("OPENAI_API_KEY is not set. Add it to your .env file.")
 
 _client: openai.OpenAI = openai.OpenAI(api_key=_api_key)
 

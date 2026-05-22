@@ -27,14 +27,15 @@ _CODE_TAGS = frozenset(
 # Dataclasses
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ErrorMapping:
     error: SASError
     node_id: str
     node_name: str
     xml_file: str
-    local_line: int       # 1-based line number within the code node
-    code_context: str     # ±15 lines around the error, >>> marker on error line
+    local_line: int  # 1-based line number within the code node
+    code_context: str  # ±15 lines around the error, >>> marker on error line
 
 
 @dataclass
@@ -44,8 +45,8 @@ class CodeNode:
     xml_file: str
     element_tag: str
     code: str
-    start_line: int       # cumulative start in the submitted code block
-    end_line: int         # cumulative end in the submitted code block
+    start_line: int  # cumulative start in the submitted code block
+    end_line: int  # cumulative end in the submitted code block
 
     @property
     def line_count(self) -> int:
@@ -99,6 +100,7 @@ class EGPLineMap:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _strip_ns(tag: str) -> str:
     """Remove the XML namespace prefix from an element tag."""
     return _NS_STRIP_RE.sub("", tag)
@@ -109,9 +111,9 @@ def _register_namespaces(tree_bytes: bytes) -> None:
     for event, elem in ET.iterparse(
         __import__("io").BytesIO(tree_bytes), events=["start-ns"]
     ):
-        prefix, uri = elem
+        prefix, uri = elem  # type: ignore[misc]
         try:
-            ET.register_namespace(prefix, uri)
+            ET.register_namespace(str(prefix), str(uri))
         except ValueError:
             pass
 
@@ -144,15 +146,17 @@ def _extract_nodes_from_xml(
         if not code_text.strip():
             continue
 
-        node_id = ""
+        # Use the Code element's own id first; only walk up to parents as fallback.
+        node_id = elem.get("id") or elem.get("Id") or ""
         node_name = bare_tag
         ancestor: ET.Element | None = elem
         while ancestor is not None:
-            node_id = ancestor.get("id", node_id)
+            if not node_id:
+                candidate_id = ancestor.get("id") or ancestor.get("Id") or ""
+                if candidate_id:
+                    node_id = candidate_id
             candidate_name = (
-                ancestor.get("name")
-                or ancestor.get("Name")
-                or ancestor.get("label")
+                ancestor.get("name") or ancestor.get("Name") or ancestor.get("label")
             )
             if candidate_name:
                 node_name = candidate_name
@@ -166,6 +170,7 @@ def _extract_nodes_from_xml(
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def build_line_map(egp_path: str) -> EGPLineMap:
     """Open a .egp ZIP archive and build a cumulative line map of all code nodes."""

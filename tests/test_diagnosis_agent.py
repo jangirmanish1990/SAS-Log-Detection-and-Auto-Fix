@@ -18,6 +18,7 @@ _PATCH_TARGET = "agents.diagnosis_agent.get_llm_client"
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def make_mapping() -> ErrorMapping:
     error = SASError(
         severity="ERROR",
@@ -77,6 +78,7 @@ _GOOD_RESPONSE: dict = {
 # Tests — guard paths (no LLM calls)
 # ---------------------------------------------------------------------------
 
+
 def test_dry_run_skips_llm() -> None:
     state = base_state()
     state["dry_run"] = True
@@ -104,6 +106,7 @@ def test_empty_mappings_returns_empty_diagnoses() -> None:
 # Tests — successful LLM call
 # ---------------------------------------------------------------------------
 
+
 def test_successful_diagnosis() -> None:
     with patch(_PATCH_TARGET, return_value=_mock_client(json.dumps(_GOOD_RESPONSE))):
         result = diagnose_errors(base_state())
@@ -129,6 +132,7 @@ def test_run_log_updated() -> None:
 # ---------------------------------------------------------------------------
 # Tests — failure and fallback paths
 # ---------------------------------------------------------------------------
+
 
 def test_llm_failure_falls_back() -> None:
     client = MagicMock()
@@ -161,6 +165,7 @@ def test_json_in_markdown_extracted() -> None:
 # ---------------------------------------------------------------------------
 # Tests — _parse_llm_response unit tests
 # ---------------------------------------------------------------------------
+
 
 def test_parse_llm_response_strict_json() -> None:
     payload = {"root_cause": "typo", "fixable": True}

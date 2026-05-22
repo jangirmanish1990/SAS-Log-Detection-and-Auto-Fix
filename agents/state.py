@@ -16,5 +16,5 @@ class FixerState(TypedDict):
     diagnoses: list[dict]
     patches: list[dict]
     output_path: str | None
-    run_log: list[str]           # human-readable record of what each node did
+    run_log: list[str]  # human-readable record of what each node did
     errors_encountered: list[str]  # error messages from any failed steps

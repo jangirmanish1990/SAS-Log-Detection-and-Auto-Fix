@@ -24,6 +24,7 @@ _XML_DECLARATION = b"<?xml"
 # Dataclass
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class PatchResult:
     node_id: str
@@ -36,6 +37,7 @@ class PatchResult:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _derive_output_path(egp_path: str) -> str:
     """Insert '_fixed' before the .egp extension: 'project.egp' -> 'project_fixed.egp'."""
     p = Path(egp_path)
@@ -45,9 +47,9 @@ def _derive_output_path(egp_path: str) -> str:
 def _register_namespaces(raw_bytes: bytes) -> None:
     """Pre-register all namespaces from raw_bytes to prevent ns0/ns1 mangling."""
     for event, elem in ET.iterparse(io.BytesIO(raw_bytes), events=["start-ns"]):
-        prefix, uri = elem
+        prefix, uri = elem  # type: ignore[misc]
         try:
-            ET.register_namespace(prefix, uri)
+            ET.register_namespace(str(prefix), str(uri))
         except ValueError:
             pass
 
@@ -114,7 +116,9 @@ def _patch_xml_file(
         return raw_bytes, results
 
     patch_lookup: dict[str, str] = {
-        p["node_id"]: p["new_code"] for p in patches if "node_id" in p and "new_code" in p
+        p["node_id"]: p["new_code"]
+        for p in patches
+        if "node_id" in p and "new_code" in p
     }
 
     _walk_and_patch(root, patch_lookup, xml_file, results)
@@ -148,6 +152,7 @@ def _patch_xml_file(
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def apply_patches(
     egp_path: str,
     patches: list[dict],
@@ -172,9 +177,7 @@ def apply_patches(
     # ------------------------------------------------------------------
     try:
         with zipfile.ZipFile(egp_path, "r") as zf:
-            archive: dict[str, bytes] = {
-                name: zf.read(name) for name in zf.namelist()
-            }
+            archive: dict[str, bytes] = {name: zf.read(name) for name in zf.namelist()}
     except (FileNotFoundError, zipfile.BadZipFile) as exc:
         logger.error("Cannot open source EGP %s: %s", egp_path, exc)
         raise

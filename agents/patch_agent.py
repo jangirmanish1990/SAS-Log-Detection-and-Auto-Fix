@@ -89,9 +89,7 @@ def generate_patches(state: FixerState) -> dict:
         return {"patches": [], "run_log": run_log}
 
     # Build a node_id → ErrorMapping lookup once for O(1) access per diagnosis
-    mapping_by_node: dict[str, ErrorMapping] = {
-        m.node_id: m for m in state["mappings"]
-    }
+    mapping_by_node: dict[str, ErrorMapping] = {m.node_id: m for m in state["mappings"]}
 
     client = get_llm_client()
     patches: list[dict] = []
@@ -99,7 +97,6 @@ def generate_patches(state: FixerState) -> dict:
 
     for diagnosis in diagnoses:
         node_id: str = diagnosis.get("node_id", "")
-        node_name: str = diagnosis.get("node_name", node_id)
 
         if not diagnosis.get("fixable", False):
             reason = diagnosis.get("fix_hint", "marked not fixable")
@@ -125,7 +122,10 @@ def generate_patches(state: FixerState) -> dict:
                 model=DEFAULT_MODEL,
                 messages=[
                     {"role": "system", "content": PATCH_SYSTEM_PROMPT},
-                    {"role": "user", "content": _build_user_prompt(diagnosis, full_code)},
+                    {
+                        "role": "user",
+                        "content": _build_user_prompt(diagnosis, full_code),
+                    },
                 ],
             )
             raw_content: str = response.choices[0].message.content or ""
