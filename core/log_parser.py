@@ -10,9 +10,14 @@ logger = logging.getLogger(__name__)
 # Module-level regex constants
 # ---------------------------------------------------------------------------
 
-# SAS-echoed source lines: optional leading indent, line number, 1-5 spaces, code text
-# Example:  "     3    salary_new = salry * 1.1;"
+# SAS-echoed source lines: optional leading indent (0-6 spaces), line number, 1+ spaces, code text
+# Example: "    3    set work.employees;" or "4        salary_new = salry * 1.1;"
 ECHO_LINE_RE = re.compile(r"^\s{0,6}(\d+)\s{1,5}(.+)$")
+
+# SAS re-echo lines printed after an error: 7+ leading spaces, line number, 1+ spaces, non-space start
+# Example: "       4          salary_new = salry * 1.1;"
+# Requiring a non-space char after the spaces prevents matching bare error codes ("22", "76").
+REECHO_LINE_RE = re.compile(r"^\s{7,}(\d+)\s{1,}(\S.*)")
 
 # Opening line of an ERROR or WARNING entry (column 0, colon or space follows keyword)
 SEVERITY_RE = re.compile(r"^(ERROR|WARNING)[:\s]")
@@ -75,6 +80,11 @@ def parse_log(log_text: str) -> ParsedLog:
         m = ECHO_LINE_RE.match(line)
         if m:
             echoed_lines[int(m.group(1))] = m.group(2)
+        else:
+            m2 = REECHO_LINE_RE.match(line)
+            if m2:
+                # setdefault: original source echo takes priority over re-echo
+                echoed_lines.setdefault(int(m2.group(1)), m2.group(2))
 
     logger.debug("Pass 1 complete: %d echoed source lines indexed", len(echoed_lines))
 
@@ -107,34 +117,47 @@ def parse_log(log_text: str) -> ParsedLog:
 
         message = "\n".join(message_parts)
 
-        # Lookahead: up to 10 lines past the message for macro note + echo ref
+        # Lookahead: scan from block_start through 10 lines past the message.
+        # Starting at block_start catches re-echo lines that SAS prints inside
+        # the error block (before or after the message text).
         lookahead_end = j + 10
         is_macro_generated = False
         log_line_number: int | None = None
         echoed_source_line: str | None = None
+        lookahead_seen: set[int] = set()
 
-        for k in range(j, min(lookahead_end, len(lines))):
+        for k in range(block_start, min(lookahead_end, len(lines))):
             if MACRO_NOTE_RE.match(lines[k]):
                 is_macro_generated = True
             if log_line_number is None:
                 m = ECHO_LINE_RE.match(lines[k])
+                if not m:
+                    m = REECHO_LINE_RE.match(lines[k])
                 if m:
                     candidate = int(m.group(1))
+                    lookahead_seen.add(candidate)
                     if candidate in echoed_lines:
                         log_line_number = candidate
                         echoed_source_line = echoed_lines[candidate]
 
-        # Fallback: scan backward up to 30 lines for nearest echoed source line
+        # Fallback: scan backward up to 30 lines for nearest echoed source line.
+        # Only accept a candidate within 5 of any line number seen in the lookahead
+        # to avoid picking up an echo from a previous unrelated code block.
         if log_line_number is None:
             scan_start = max(0, block_start - 30)
             for k in range(block_start - 1, scan_start - 1, -1):
                 m = ECHO_LINE_RE.match(lines[k])
+                if not m:
+                    m = REECHO_LINE_RE.match(lines[k])
                 if m:
                     candidate = int(m.group(1))
                     if candidate in echoed_lines:
-                        log_line_number = candidate
-                        echoed_source_line = echoed_lines[candidate]
-                        break
+                        if not lookahead_seen or any(
+                            abs(candidate - n) <= 5 for n in lookahead_seen
+                        ):
+                            log_line_number = candidate
+                            echoed_source_line = echoed_lines[candidate]
+                            break
 
         raw_block = "\n".join(lines[block_start : min(lookahead_end, len(lines))])
 

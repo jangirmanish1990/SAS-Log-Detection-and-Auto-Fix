@@ -1,0 +1,35 @@
+NOTE: Copyright (c) 2002-2012 by SAS Institute Inc., Cary, NC, USA.
+NOTE: SAS (r) Proprietary Software 9.4 (TS1M6)
+
+1    /* Step 1: Clean salary data */
+2    data work.salaries_clean;
+3        set work.employees;
+4        salary_new = salry * 1.1;
+5        if age > 65 then retirement_flag = 1;
+6        else retirement_flag = 0;
+7    run;
+
+ERROR: Variable SALRY not found in data set WORK.EMPLOYEES.
+NOTE: The SAS System stopped processing this step because of errors.
+       4          salary_new = salry * 1.1;
+                              ----
+                              22
+                              76
+
+WARNING: The data set WORK.SALARIES_CLEAN may be incomplete.
+NOTE: There were 0 observations read from the data set WORK.EMPLOYEES.
+
+8    /* Step 2: Summary report */
+9    proc means data=work.salaries_clean;
+10       var salary_new;
+11       classs department;
+12   run;
+
+ERROR: Statement is not valid or it is used out of proper order.
+NOTE: The PROCEDURE MEANS used 0.00 CPU seconds.
+       11         classs department;
+                  -----
+                  68
+
+NOTE: SAS Institute Inc., SAS Campus Drive, Cary, NC USA 27513-2414
+NOTE: The SAS System used 0.03 CPU seconds and 34768K.
