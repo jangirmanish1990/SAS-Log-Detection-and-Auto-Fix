@@ -39,6 +39,14 @@ def make_mapping() -> ErrorMapping:
             ">>> 4 | salary_new = salry * 1.1;\n"
             "   5 | run;"
         ),
+        node_code=(
+            "\ndata work.salaries_clean;\n"
+            "    set work.employees;\n"
+            "    salary_new = salry * 1.1;\n"
+            "    if age > 65 then retirement_flag = 1;\n"
+            "    else retirement_flag = 0;\n"
+            "run;\n"
+        ),
     )
 
 

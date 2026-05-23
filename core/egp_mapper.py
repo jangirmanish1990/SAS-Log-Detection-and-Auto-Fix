@@ -36,6 +36,7 @@ class ErrorMapping:
     xml_file: str
     local_line: int  # 1-based line number within the code node
     code_context: str  # ±15 lines around the error, >>> marker on error line
+    node_code: str  # complete raw code text of the node, no markers or annotation
 
 
 @dataclass
@@ -260,6 +261,7 @@ def map_errors(
                 xml_file=node.xml_file,
                 local_line=local_line,
                 code_context=context,
+                node_code=node.code,
             )
         )
         logger.debug(

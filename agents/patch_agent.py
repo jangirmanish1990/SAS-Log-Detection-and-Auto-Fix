@@ -44,7 +44,7 @@ _FALLBACK_PATCH: dict = {
 }
 
 
-def _build_user_prompt(diagnosis: dict, full_code: str) -> str:
+def _build_user_prompt(diagnosis: dict, full_code: str, error_context: str) -> str:
     local_line = diagnosis.get("local_line", "unknown")
     return (
         f"Node: {diagnosis.get('node_name', 'unknown')}\n"
@@ -52,7 +52,8 @@ def _build_user_prompt(diagnosis: dict, full_code: str) -> str:
         f"Root cause: {diagnosis.get('root_cause', '')}\n"
         f"Diagnosis: {diagnosis.get('diagnosis', '')}\n"
         f"Fix hint: {diagnosis.get('fix_hint', '')}\n\n"
-        f"Full current SAS code block:\n{full_code}"
+        f"Full SAS code node (rewrite this completely with the fix applied):\n{full_code}"
+        f"\n\nError context for reference (do not return this format):\n{error_context}"
     )
 
 
@@ -112,11 +113,6 @@ def generate_patches(state: FixerState) -> dict:
             errors_encountered.append(msg)
             continue
 
-        # ErrorMapping carries code_context (annotated ±15-line window).
-        # Use it as the full code reference; the LLM is instructed to return
-        # the complete corrected block regardless of how much context it receives.
-        full_code = mapping.code_context
-
         try:
             response = client.chat.completions.create(
                 model=DEFAULT_MODEL,
@@ -124,7 +120,9 @@ def generate_patches(state: FixerState) -> dict:
                     {"role": "system", "content": PATCH_SYSTEM_PROMPT},
                     {
                         "role": "user",
-                        "content": _build_user_prompt(diagnosis, full_code),
+                        "content": _build_user_prompt(
+                            diagnosis, mapping.node_code, mapping.code_context
+                        ),
                     },
                 ],
             )
