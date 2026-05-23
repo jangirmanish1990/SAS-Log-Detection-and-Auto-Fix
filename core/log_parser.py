@@ -109,7 +109,7 @@ def parse_log(log_text: str) -> ParsedLog:
         j = i + 1
         while j < len(lines):
             cont_line = lines[j]
-            if CONTINUATION_RE.match(cont_line) and not ECHO_LINE_RE.match(cont_line):
+            if CONTINUATION_RE.match(cont_line) and not ECHO_LINE_RE.match(cont_line) and not REECHO_LINE_RE.match(cont_line):
                 message_parts.append(cont_line)
                 j += 1
             else:

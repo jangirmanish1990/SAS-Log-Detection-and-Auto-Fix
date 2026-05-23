@@ -149,3 +149,75 @@ def test_map_errors_returns_mappings(line_map: EGPLineMap) -> None:
     result = map_errors([e1, e2], line_map)
     assert len(result) == 2
     assert result[0].local_line == 4
+
+
+# ---------------------------------------------------------------------------
+# Multi-file EGP fixtures and tests
+# ---------------------------------------------------------------------------
+
+_STEP1_XML = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<SASProject xmlns="urn:schemas-sas-com:egproject">
+  <Tasks>
+    <Task id="task001" name="Load Data">
+      <Code id="node001" name="Load Data">
+libname mylib 'C:\\data';
+data work.raw;
+    set mylib.source;
+run;
+</Code>
+    </Task>
+  </Tasks>
+</SASProject>
+"""
+
+_STEP2_XML = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<SASProject xmlns="urn:schemas-sas-com:egproject">
+  <Tasks>
+    <Task id="task002" name="Transform Data">
+      <Code id="node002" name="Transform Data">
+data work.clean;
+    set work.raw;
+    salary = salry * 1.1;
+run;
+</Code>
+    </Task>
+  </Tasks>
+</SASProject>
+"""
+
+
+@pytest.fixture()
+def multi_file_egp(tmp_path: Path) -> str:
+    """Write a two-XML-file .egp archive and return its path."""
+    egp_path = tmp_path / "multi.egp"
+    with zipfile.ZipFile(egp_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("step1.xml", _STEP1_XML)
+        zf.writestr("step2.xml", _STEP2_XML)
+    return str(egp_path)
+
+
+@pytest.fixture()
+def multi_file_line_map(multi_file_egp: str) -> EGPLineMap:
+    return build_line_map(multi_file_egp)
+
+
+def test_multi_file_two_nodes_found(multi_file_line_map: EGPLineMap) -> None:
+    assert len(multi_file_line_map.nodes) == 2
+
+
+def test_multi_file_node_xml_files(multi_file_line_map: EGPLineMap) -> None:
+    assert multi_file_line_map.nodes[0].xml_file != multi_file_line_map.nodes[1].xml_file
+
+
+def test_multi_file_line_continuity(multi_file_line_map: EGPLineMap) -> None:
+    assert multi_file_line_map.nodes[1].start_line == multi_file_line_map.nodes[0].end_line + 1
+
+
+def test_multi_file_find_node_crosses_files(multi_file_line_map: EGPLineMap) -> None:
+    # Pick a line clearly inside step2.xml's range
+    target = multi_file_line_map.nodes[1].start_line + 1
+    node, _ = multi_file_line_map.find_node(target)
+    assert node is not None
+    assert node.xml_file == "step2.xml"

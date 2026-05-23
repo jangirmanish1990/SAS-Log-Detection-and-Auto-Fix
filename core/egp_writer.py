@@ -6,6 +6,7 @@ import re
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 from xml.etree import ElementTree as ET
 
 logger = logging.getLogger(__name__)
@@ -57,7 +58,7 @@ def _derive_output_path(egp_path: str) -> str:
 def _register_namespaces(raw_bytes: bytes) -> None:
     """Pre-register all namespaces from raw_bytes to prevent ns0/ns1 mangling."""
     for event, elem in ET.iterparse(io.BytesIO(raw_bytes), events=["start-ns"]):
-        prefix, uri = elem  # type: ignore[misc]
+        prefix, uri = elem
         try:
             ET.register_namespace(str(prefix), str(uri))
         except ValueError:
@@ -146,7 +147,7 @@ def _walk_and_patch(
 
 def _patch_xml_file(
     raw_bytes: bytes,
-    patches: list[dict],
+    patches: list[dict[str, Any]],
 ) -> tuple[bytes, list[PatchResult]]:
     """Parse raw_bytes, apply patches, and return (patched_bytes, results).
 
@@ -161,7 +162,7 @@ def _patch_xml_file(
     results: list[PatchResult] = []
 
     # HIGH #4: reject patches whose node_id is empty or whitespace
-    valid_patches: list[dict] = []
+    valid_patches: list[dict[str, Any]] = []
     for p in patches:
         nid = (p.get("node_id") or "").strip()
         if not nid:
@@ -278,7 +279,7 @@ def _patch_xml_file(
 
 def apply_patches(
     egp_path: str,
-    patches: list[dict],
+    patches: list[dict[str, Any]],
     output_path: str | None = None,
 ) -> tuple[str, list[PatchResult]]:
     """Write a new _fixed.egp with the given code patches applied.
@@ -311,7 +312,7 @@ def apply_patches(
     # ------------------------------------------------------------------
     # Group patches by xml_file
     # ------------------------------------------------------------------
-    patches_by_file: dict[str, list[dict]] = {}
+    patches_by_file: dict[str, list[dict[str, Any]]] = {}
     for patch in patches:
         xml_file = patch.get("xml_file", "")
         patches_by_file.setdefault(xml_file, []).append(patch)

@@ -1,6 +1,7 @@
 """Tests for agents/diagnosis_agent.py."""
 
 import json
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from agents.diagnosis_agent import (
@@ -75,7 +76,7 @@ def _mock_client(content: str) -> MagicMock:
     return client
 
 
-_GOOD_RESPONSE: dict = {
+_GOOD_RESPONSE: dict[str, Any] = {
     "root_cause": "Typo in variable name",
     "diagnosis": "SALRY should be SALARY",
     "fixable": True,

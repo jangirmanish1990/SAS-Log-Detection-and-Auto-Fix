@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def node_parse_log(state: FixerState) -> dict:
+def node_parse_log(state: FixerState) -> dict[str, Any]:
     """Read the SAS .log file and extract structured error records."""
     run_log: list[str] = list(state["run_log"])
     try:
@@ -43,7 +43,7 @@ def node_parse_log(state: FixerState) -> dict:
         }
 
 
-def node_map_errors(state: FixerState) -> dict:
+def node_map_errors(state: FixerState) -> dict[str, Any]:
     """Open the .egp archive and map each SASError to its code node."""
     run_log: list[str] = list(state["run_log"])
     try:
@@ -65,17 +65,17 @@ def node_map_errors(state: FixerState) -> dict:
         }
 
 
-def node_diagnose_errors(state: FixerState) -> dict:
+def node_diagnose_errors(state: FixerState) -> dict[str, Any]:
     """Delegate to diagnose_errors, which handles dry_run/parse_only internally."""
     return diagnose_errors(state)
 
 
-def node_generate_patches(state: FixerState) -> dict:
+def node_generate_patches(state: FixerState) -> dict[str, Any]:
     """Delegate to generate_patches, which handles dry_run/parse_only internally."""
     return generate_patches(state)
 
 
-def node_apply_patches(state: FixerState) -> dict:
+def node_apply_patches(state: FixerState) -> dict[str, Any]:
     """Write the patched code back into a new _fixed.egp file."""
     run_log: list[str] = list(state["run_log"])
 
@@ -113,7 +113,7 @@ def node_apply_patches(state: FixerState) -> dict:
 
 def build_graph() -> Any:
     """Compile and return the LangGraph pipeline."""
-    graph: StateGraph = StateGraph(FixerState)
+    graph: StateGraph[FixerState] = StateGraph(FixerState)
 
     graph.add_node("parse_log", node_parse_log)
     graph.add_node("map_errors", node_map_errors)

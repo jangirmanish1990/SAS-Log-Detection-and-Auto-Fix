@@ -9,6 +9,7 @@ from agents.orchestrator import run_pipeline
 from config import configure_logging
 from core.egp_mapper import build_line_map
 from core.log_parser import parse_log, summarize
+from core.report import write_report
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +107,9 @@ def main() -> None:
     if output_path:
         fixed_msg = f"Fixed EGP written: {output_path}"
         print(fixed_msg)
+
+    report_path = write_report(final)
+    print(f"Report written: {report_path}")
 
     errors_encountered: list[str] = final["errors_encountered"]
     for err in errors_encountered:

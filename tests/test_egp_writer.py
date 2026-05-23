@@ -180,3 +180,85 @@ def test_derive_output_path() -> None:
     assert Path(_derive_output_path("C:/work/my_analysis.egp")) == Path(
         "C:/work/my_analysis_fixed.egp"
     )
+
+
+# ---------------------------------------------------------------------------
+# Multi-file EGP fixtures and tests
+# ---------------------------------------------------------------------------
+
+_STEP1_XML = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<SASProject xmlns="urn:schemas-sas-com:egproject">
+  <Tasks>
+    <Task id="task001" name="Load Data">
+      <Code id="node001" name="Load Data">
+libname mylib 'C:\\data';
+data work.raw;
+    set mylib.source;
+run;
+</Code>
+    </Task>
+  </Tasks>
+</SASProject>
+"""
+
+_STEP2_XML = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<SASProject xmlns="urn:schemas-sas-com:egproject">
+  <Tasks>
+    <Task id="task002" name="Transform Data">
+      <Code id="node002" name="Transform Data">
+data work.clean;
+    set work.raw;
+    salary = salry * 1.1;
+run;
+</Code>
+    </Task>
+  </Tasks>
+</SASProject>
+"""
+
+
+@pytest.fixture()
+def multi_file_egp(tmp_path: Path) -> str:
+    """Write a two-XML-file .egp archive and return its path."""
+    egp_path = tmp_path / "multi.egp"
+    with zipfile.ZipFile(egp_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("step1.xml", _STEP1_XML)
+        zf.writestr("step2.xml", _STEP2_XML)
+    return str(egp_path)
+
+
+def test_multi_file_patch_correct_file(multi_file_egp: str) -> None:
+    new_code = (
+        "data work.clean;\n"
+        "    set work.raw;\n"
+        "    salary = salary * 1.1;\n"
+        "run;\n"
+    )
+    patches = [{"node_id": "node002", "xml_file": "step2.xml", "new_code": new_code}]
+    output_path, results = apply_patches(multi_file_egp, patches)
+
+    assert all(r.success for r in results), [r for r in results if not r.success]
+
+    with zipfile.ZipFile(output_path) as zf:
+        step2_bytes = zf.read("step2.xml")
+        step1_bytes = zf.read("step1.xml")
+
+    # step2 has the fix, original typo is gone
+    assert b"salary = salary * 1.1" in step2_bytes
+    assert b"salry" not in step2_bytes
+    # step1 is untouched
+    assert b"mylib.source" in step1_bytes
+
+
+def test_multi_file_original_untouched(multi_file_egp: str) -> None:
+    patches = [{"node_id": "node002", "xml_file": "step2.xml", "new_code": "fixed;\n"}]
+    apply_patches(multi_file_egp, patches)
+
+    with zipfile.ZipFile(multi_file_egp) as zf:
+        step1_bytes = zf.read("step1.xml")
+        step2_bytes = zf.read("step2.xml")
+
+    assert b"mylib.source" in step1_bytes
+    assert b"salry" in step2_bytes

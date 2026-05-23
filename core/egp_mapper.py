@@ -112,7 +112,7 @@ def _register_namespaces(tree_bytes: bytes) -> None:
     for event, elem in ET.iterparse(
         __import__("io").BytesIO(tree_bytes), events=["start-ns"]
     ):
-        prefix, uri = elem  # type: ignore[misc]
+        prefix, uri = elem
         try:
             ET.register_namespace(str(prefix), str(uri))
         except ValueError:

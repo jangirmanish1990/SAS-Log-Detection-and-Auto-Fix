@@ -1,6 +1,7 @@
 """Tests for agents/patch_agent.py."""
 
 import json
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from agents.patch_agent import (
@@ -57,7 +58,7 @@ def make_mapping() -> ErrorMapping:
     )
 
 
-def make_diagnosis(fixable: bool = True) -> dict:
+def make_diagnosis(fixable: bool = True) -> dict[str, Any]:
     return {
         "node_id": "node001",
         "node_name": "Clean Salaries",

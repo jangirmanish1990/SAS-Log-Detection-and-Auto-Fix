@@ -3,6 +3,7 @@
 import json
 import logging
 import re
+from typing import Any, cast
 
 from agents.llm import DEFAULT_MODEL, get_llm_client
 from agents.state import FixerState
@@ -26,13 +27,23 @@ DIAGNOSIS_SYSTEM_PROMPT: str = (
     "Set fixable=false only if:\n"
     "- The error requires a missing dataset or library that must be created outside the code\n"
     "- The error is caused by a macro that cannot be located\n"
-    "- The fix requires information not present in the code context"
+    "- The fix requires information not present in the code context\n\n"
+    "Common SAS error patterns and how to classify them:\n"
+    "- 'Physical file does not exist' → fixable=false (external dependency, path must "
+    "exist on the SAS server)\n"
+    "- 'Variable X not found in data set Y' → fixable=true (usually a typo in the "
+    "variable name — check surrounding code for the correct spelling)\n"
+    "- 'The following columns were not found' in PROC SQL → fixable=true (usually a "
+    "typo in a GROUP BY, ORDER BY, or SELECT clause)\n"
+    "- 'Variable X not found' with macro-generated note → fixable=false (macro variable "
+    "resolved to wrong value — requires macro parameter fix, not code patch)\n"
+    "- File/dataset not found errors → fixable=false (external dependency)"
 )
 
 # Extracts the first {...} block from an LLM response that isn't clean JSON
 _JSON_EXTRACT_RE = re.compile(r"\{.*\}", re.DOTALL)
 
-_FALLBACK_DIAGNOSIS: dict = {
+_FALLBACK_DIAGNOSIS: dict[str, Any] = {
     "root_cause": "LLM response could not be parsed",
     "diagnosis": "",
     "fixable": False,
@@ -49,17 +60,17 @@ def _build_user_prompt(mapping: ErrorMapping) -> str:
     )
 
 
-def _parse_llm_response(raw: str) -> dict:
+def _parse_llm_response(raw: str) -> dict[str, Any]:
     """Attempt strict JSON parse, then regex extraction, then return fallback."""
     try:
-        return json.loads(raw)
+        return cast(dict[str, Any], json.loads(raw))
     except json.JSONDecodeError:
         pass
 
     match = _JSON_EXTRACT_RE.search(raw)
     if match:
         try:
-            return json.loads(match.group())
+            return cast(dict[str, Any], json.loads(match.group()))
         except json.JSONDecodeError:
             pass
 
@@ -67,7 +78,7 @@ def _parse_llm_response(raw: str) -> dict:
     return dict(_FALLBACK_DIAGNOSIS)
 
 
-def diagnose_errors(state: FixerState) -> dict:
+def diagnose_errors(state: FixerState) -> dict[str, Any]:
     """LangGraph node: call OpenAI to diagnose each mapped SAS error."""
     run_log: list[str] = list(state["run_log"])
 
@@ -82,7 +93,7 @@ def diagnose_errors(state: FixerState) -> dict:
         return {"diagnoses": [], "run_log": run_log}
 
     client = get_llm_client()
-    diagnoses: list[dict] = []
+    diagnoses: list[dict[str, Any]] = []
     errors_encountered: list[str] = list(state["errors_encountered"])
 
     for mapping in mappings:

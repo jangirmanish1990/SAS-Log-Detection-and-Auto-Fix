@@ -3,6 +3,7 @@
 import json
 import logging
 import re
+from typing import Any, cast
 
 from agents.llm import DEFAULT_MODEL, get_llm_client
 from agents.state import FixerState
@@ -36,7 +37,7 @@ PATCH_SYSTEM_PROMPT: str = (
 
 _JSON_EXTRACT_RE = re.compile(r"\{.*\}", re.DOTALL)
 
-_FALLBACK_PATCH: dict = {
+_FALLBACK_PATCH: dict[str, Any] = {
     "success": False,
     "new_code": "",
     "explanation": "",
@@ -44,7 +45,7 @@ _FALLBACK_PATCH: dict = {
 }
 
 
-def _build_user_prompt(diagnosis: dict, full_code: str, error_context: str) -> str:
+def _build_user_prompt(diagnosis: dict[str, Any], full_code: str, error_context: str) -> str:
     local_line = diagnosis.get("local_line", "unknown")
     return (
         f"Node: {diagnosis.get('node_name', 'unknown')}\n"
@@ -57,17 +58,17 @@ def _build_user_prompt(diagnosis: dict, full_code: str, error_context: str) -> s
     )
 
 
-def _parse_patch_response(raw: str) -> dict:
+def _parse_patch_response(raw: str) -> dict[str, Any]:
     """Attempt strict JSON parse, then regex extraction, then return fallback."""
     try:
-        return json.loads(raw)
+        return cast(dict[str, Any], json.loads(raw))
     except json.JSONDecodeError:
         pass
 
     match = _JSON_EXTRACT_RE.search(raw)
     if match:
         try:
-            return json.loads(match.group())
+            return cast(dict[str, Any], json.loads(match.group()))
         except json.JSONDecodeError:
             pass
 
@@ -75,7 +76,7 @@ def _parse_patch_response(raw: str) -> dict:
     return dict(_FALLBACK_PATCH)
 
 
-def generate_patches(state: FixerState) -> dict:
+def generate_patches(state: FixerState) -> dict[str, Any]:
     """LangGraph node: call OpenAI to generate a code fix for each fixable diagnosis."""
     run_log: list[str] = list(state["run_log"])
 
@@ -83,7 +84,7 @@ def generate_patches(state: FixerState) -> dict:
         run_log.append("generate_patches: skipped (dry_run/parse_only)")
         return {"run_log": run_log}
 
-    diagnoses: list[dict] = state["diagnoses"]
+    diagnoses: list[dict[str, Any]] = state["diagnoses"]
     if not diagnoses:
         logger.warning("generate_patches: no diagnoses available")
         run_log.append("generate_patches: no diagnoses to patch")
@@ -93,7 +94,7 @@ def generate_patches(state: FixerState) -> dict:
     mapping_by_node: dict[str, ErrorMapping] = {m.node_id: m for m in state["mappings"]}
 
     client = get_llm_client()
-    patches: list[dict] = []
+    patches: list[dict[str, Any]] = []
     errors_encountered: list[str] = list(state["errors_encountered"])
 
     for diagnosis in diagnoses:
@@ -160,7 +161,7 @@ def generate_patches(state: FixerState) -> dict:
     run_log.append(f"generate_patches: generated {n} patch(es)")
     logger.info("generate_patches: completed with %d patch(es)", n)
 
-    result_state: dict = {"patches": patches, "run_log": run_log}
+    result_state: dict[str, Any] = {"patches": patches, "run_log": run_log}
     if errors_encountered != list(state["errors_encountered"]):
         result_state["errors_encountered"] = errors_encountered
     return result_state
