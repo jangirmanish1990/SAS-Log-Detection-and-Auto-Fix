@@ -19,6 +19,16 @@ _CODE_TAGS = frozenset(
 
 _XML_DECLARATION = b"<?xml"
 
+# Template for locating a code element by its own id/name attribute in raw XML text.
+# "NODE_ID" is a literal placeholder — replaced via str.replace() before compiling.
+# Groups: (1) opening tag, (2) element content, (3) closing tag.
+_CODE_ELEM_PATTERN = (
+    r"(<(?:\w+:)?(?:Code|SourceCode|SASCode|CodeTemplate|EmbeddedSASCode)"
+    r"\b[^>]*(?:id|Id|name|Name)=[\"']NODE_ID[\"'][^>]*>)"
+    r"(.*?)"
+    r"(</(?:\w+:)?(?:Code|SourceCode|SASCode|CodeTemplate|EmbeddedSASCode)>)"
+)
+
 
 # ---------------------------------------------------------------------------
 # Dataclass
@@ -54,13 +64,40 @@ def _register_namespaces(raw_bytes: bytes) -> None:
             pass
 
 
+def _replace_cdata_content(
+    xml_str: str, node_id: str, new_code: str
+) -> tuple[str, bool]:
+    """Find a code element by id/name in the raw XML string and replace its content.
+
+    The replacement is wrapped in CDATA to preserve all SAS source characters
+    without entity encoding. Returns (updated_xml_str, matched).
+    """
+    pattern = re.compile(
+        _CODE_ELEM_PATTERN.replace("NODE_ID", re.escape(node_id)),
+        re.DOTALL,
+    )
+    new_xml, count = pattern.subn(
+        lambda m: m.group(1) + "<![CDATA[" + new_code + "]]>" + m.group(3),
+        xml_str,
+        count=1,
+    )
+    return new_xml, count > 0
+
+
 def _walk_and_patch(
     element: ET.Element,
     patch_lookup: dict[str, str],
     xml_file: str,
     results: list[PatchResult],
+    parent_map: dict[ET.Element, ET.Element],
 ) -> None:
-    """Recursively walk the element tree, replacing code text for matched node IDs."""
+    """Recursively walk the element tree, replacing code text for matched node IDs.
+
+    When a code element's own attributes don't match any patch key, walks up
+    the parent chain (max 3 levels) to find an ancestor whose id/name matches —
+    mirroring the ancestor-walk that egp_mapper uses when the code element itself
+    carries no id attribute.
+    """
     bare_tag = _NS_STRIP_RE.sub("", element.tag)
 
     if bare_tag in _CODE_TAGS:
@@ -71,6 +108,25 @@ def _walk_and_patch(
             or element.get("Name")
             or ""
         )
+
+        # Ancestor walk: if own id is absent/unrecognised, try parents (max 3 up)
+        if node_id not in patch_lookup:
+            ancestor: ET.Element | None = parent_map.get(element)
+            levels = 0
+            while ancestor is not None and levels < 3:
+                anc_id = (
+                    ancestor.get("id")
+                    or ancestor.get("Id")
+                    or ancestor.get("name")
+                    or ancestor.get("Name")
+                    or ""
+                )
+                if anc_id in patch_lookup:
+                    node_id = anc_id
+                    break
+                ancestor = parent_map.get(ancestor)
+                levels += 1
+
         if node_id in patch_lookup:
             element.text = patch_lookup[node_id]
             results.append(
@@ -85,7 +141,7 @@ def _walk_and_patch(
             return  # children of a patched code element need no further walk
 
     for child in element:
-        _walk_and_patch(child, patch_lookup, xml_file, results)
+        _walk_and_patch(child, patch_lookup, xml_file, results, parent_map)
 
 
 def _patch_xml_file(
@@ -94,10 +150,47 @@ def _patch_xml_file(
 ) -> tuple[bytes, list[PatchResult]]:
     """Parse raw_bytes, apply patches, and return (patched_bytes, results).
 
+    Two code paths:
+    - CDATA detected  : string-replacement via regex, new content wrapped in CDATA.
+      Avoids ET round-tripping that silently converts CDATA to entity-escaped text.
+    - No CDATA        : ElementTree walk-and-replace (correct entity handling).
+
     The XML declaration is preserved when present in the original bytes.
     """
     xml_file = patches[0].get("xml_file", "<unknown>") if patches else "<unknown>"
     results: list[PatchResult] = []
+
+    # HIGH #4: reject patches whose node_id is empty or whitespace
+    valid_patches: list[dict] = []
+    for p in patches:
+        nid = (p.get("node_id") or "").strip()
+        if not nid:
+            logger.warning("Skipping patch with empty node_id in %s", xml_file)
+            results.append(
+                PatchResult(
+                    node_id="",
+                    xml_file=xml_file,
+                    success=False,
+                    error_message="Patch skipped: node_id is empty or whitespace",
+                )
+            )
+        else:
+            valid_patches.append(p)
+    patches = valid_patches
+
+    # HIGH #5: warn explicitly when duplicate node_ids are present (last one wins)
+    seen_ids: dict[str, int] = {}
+    for p in patches:
+        nid = p.get("node_id", "")
+        seen_ids[nid] = seen_ids.get(nid, 0) + 1
+    for nid, cnt in seen_ids.items():
+        if cnt > 1:
+            logger.warning(
+                "Duplicate node_id %r appears %d time(s) in %s — keeping last",
+                nid,
+                cnt,
+                xml_file,
+            )
 
     _register_namespaces(raw_bytes)
 
@@ -121,7 +214,37 @@ def _patch_xml_file(
         if "node_id" in p and "new_code" in p
     }
 
-    _walk_and_patch(root, patch_lookup, xml_file, results)
+    # CRITICAL #1: if any CDATA section is present, avoid ET serialisation entirely
+    # to prevent silent CDATA→entity conversion across the whole document.
+    if b"<![CDATA[" in raw_bytes:
+        xml_str = raw_bytes.decode("utf-8")
+        for node_id, new_code in patch_lookup.items():
+            xml_str, matched = _replace_cdata_content(xml_str, node_id, new_code)
+            if matched:
+                results.append(
+                    PatchResult(
+                        node_id=node_id,
+                        xml_file=xml_file,
+                        success=True,
+                        error_message=None,
+                    )
+                )
+                logger.debug("Patched node %r in %s (CDATA path)", node_id, xml_file)
+            else:
+                results.append(
+                    PatchResult(
+                        node_id=node_id,
+                        xml_file=xml_file,
+                        success=False,
+                        error_message=f"Node ID '{node_id}' not found in {xml_file}",
+                    )
+                )
+                logger.warning("Node ID %r not found in %s (CDATA path)", node_id, xml_file)
+        return xml_str.encode("utf-8"), results
+
+    # Non-CDATA path: ElementTree walk with ancestor-id fallback (CRITICAL #2)
+    parent_map: dict[ET.Element, ET.Element] = {c: p for p in root.iter() for c in p}
+    _walk_and_patch(root, patch_lookup, xml_file, results, parent_map)
 
     # Record failure for any patch that _walk_and_patch never matched
     matched_ids = {r.node_id for r in results if r.success}
@@ -173,11 +296,14 @@ def apply_patches(
     all_results: list[PatchResult] = []
 
     # ------------------------------------------------------------------
-    # Load all ZIP members into memory first
+    # Load all ZIP members into memory, preserving ZipInfo metadata
     # ------------------------------------------------------------------
     try:
         with zipfile.ZipFile(egp_path, "r") as zf:
-            archive: dict[str, bytes] = {name: zf.read(name) for name in zf.namelist()}
+            # HIGH #3: keep ZipInfo so timestamps/compression/attrs survive the round-trip
+            archive: dict[str, tuple[zipfile.ZipInfo, bytes]] = {
+                zi.filename: (zi, zf.read(zi)) for zi in zf.infolist()
+            }
     except (FileNotFoundError, zipfile.BadZipFile) as exc:
         logger.error("Cannot open source EGP %s: %s", egp_path, exc)
         raise
@@ -209,10 +335,9 @@ def apply_patches(
             continue
 
         try:
-            patched_bytes, file_results = _patch_xml_file(
-                archive[xml_file], file_patches
-            )
-            archive[xml_file] = patched_bytes
+            zip_info, raw_bytes = archive[xml_file]
+            patched_bytes, file_results = _patch_xml_file(raw_bytes, file_patches)
+            archive[xml_file] = (zip_info, patched_bytes)
             all_results.extend(file_results)
         except Exception as exc:
             for patch in file_patches:
@@ -228,12 +353,12 @@ def apply_patches(
                 )
 
     # ------------------------------------------------------------------
-    # Write the new ZIP
+    # Write the new ZIP, restoring original ZipInfo metadata per member
     # ------------------------------------------------------------------
     try:
         with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as out_zf:
-            for name, data in archive.items():
-                out_zf.writestr(name, data)
+            for zip_info, data in archive.values():
+                out_zf.writestr(zip_info, data)
     except OSError as exc:
         logger.error("Failed to write output EGP %s: %s", output_path, exc)
         raise
